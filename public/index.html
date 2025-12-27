@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>YouTube Sentiment Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .container {
+      background: #ffffff;
+      padding: 30px 40px;
+      width: 520px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      text-align: center;
+    }
+
+    h2 { color: #333; }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      margin-bottom: 10px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      background: #ff0000;
+      color: white;
+      font-size: 15px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #333;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #555;
+    }
+
+    #results {
+      margin-top: 20px;
+      text-align: left;
+      max-height: 250px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .comment {
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .positive { color: green; font-weight: bold; }
+    .negative { color: red; font-weight: bold; }
+    .neutral  { color: #555; font-weight: bold; }
+
+    canvas {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>🎥 Social Media Sentiment Analyzer</h2>
+
+    <input
+      type="text"
+      id="youtubeUrl"
+      placeholder="Paste YouTube video URL here"
+    />
+
+    <button onclick="analyzeYoutube()">Analyze Comments</button>
+    <button class="secondary" onclick="downloadCSV()">Download CSV</button>
+
+    <p id="status"></p>
+
+    <canvas id="sentimentChart"></canvas>
+
+    <div id="results"></div>
+  </div>
+
+<script>
+  const BACKEND_URL =
+    "https://analyze-sentiment-5557432432.asia-south1.run.app/analyze-youtube";
+
+  let analysisData = [];
+  let chart;
+
+  async function analyzeYoutube() {
+    const url = document.getElementById("youtubeUrl").value;
+    const status = document.getElementById("status");
+    const resultsDiv = document.getElementById("results");
+
+    resultsDiv.style.display = "none";
+    resultsDiv.innerHTML = "";
+
+    if (!url) {
+      status.innerText = "❌ Please enter a YouTube URL";
+      return;
+    }
+
+    status.innerText = "⏳ Analyzing comments...";
+
+    try {
+      const response = await fetch(BACKEND_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+      });
+
+      analysisData = await response.json();
+
+      if (!response.ok) {
+        status.innerText = "❌ Backend error";
+        return;
+      }
+
+      status.innerText = `✅ ${analysisData.length} comments analyzed`;
+      resultsDiv.style.display = "block";
+
+      let positive = 0, negative = 0, neutral = 0;
+
+      analysisData.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "comment";
+
+        let cls = "neutral";
+        if (item.sentiment === "positive") {
+          cls = "positive"; positive++;
+        }
+        if (item.sentiment === "negative") {
+          cls = "negative"; negative++;
+        }
+        if (item.sentiment === "neutral") neutral++;
+
+        div.innerHTML = `
+          <p>${item.comment}</p>
+          <span class="${cls}">
+            Sentiment: ${item.sentiment} (${item.confidence.toFixed(2)})
+          </span>
+        `;
+
+        resultsDiv.appendChild(div);
+      });
+
+      drawChart(positive, negative, neutral);
+
+    } catch (error) {
+      console.error(error);
+      status.innerText = "❌ Error connecting to backend";
+    }
+  }
+
+  function drawChart(pos, neg, neu) {
+    const ctx = document.getElementById("sentimentChart");
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels: ["Positive", "Negative", "Neutral"],
+        datasets: [{
+          data: [pos, neg, neu],
+          backgroundColor: ["#4CAF50", "#F44336", "#9E9E9E"]
+        }]
+      }
+    });
+  }
+
+  function downloadCSV() {
+    if (analysisData.length === 0) {
+      alert("Analyze comments first");
+      return;
+    }
+
+    let csv = "Comment,Sentiment,Confidence\n";
+
+    analysisData.forEach(item => {
+      csv += `"${item.comment.replace(/"/g,'""')}",${item.sentiment},${item.confidence}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sentiment_report.csv";
+    a.click();
+  }
+</script>
+</body>
+</html>
+
